@@ -1,0 +1,14 @@
+{
+  "editor.formatOnSave": true,
+  "editor.tabSize": 2,
+  "C_Cpp.default.intelliSenseMode": "gcc-x64",
+  "files.associations": {
+    "*.h": "cpp",
+    "*.cpp": "cpp",
+    "*.ino": "cpp"
+  },
+  "editor.rulers": [100],
+  "[cpp]": {
+    "editor.defaultFormatter": "ms-vscode.cpptools"
+  }
+}

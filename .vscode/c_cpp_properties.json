@@ -1,0 +1,23 @@
+{
+  "configurations": [
+    {
+      "name": "ESP32-C3 (PlatformIO)",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "${env:HOME}/.platformio/packages/framework-arduinoespressif32/cores/**",
+        "${env:HOME}/.platformio/packages/framework-arduinoespressif32/libraries/**",
+        "${env:HOME}/.platformio/packages/toolchain-riscv32-esp/**"
+      ],
+      "defines": [
+        "ARDUINO",
+        "ESP32",
+        "CONFIG_IDF_TARGET_ESP32C3"
+      ],
+      "compilerPath": "${env:HOME}/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-gcc",
+      "cStandard": "c17",
+      "cppStandard": "gnu++17",
+      "intelliSenseMode": "gcc-x64"
+    }
+  ],
+  "version": 4
+}
