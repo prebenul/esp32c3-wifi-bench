@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32-C3 WiFi Benchmark</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #1a1d24;
+    --card-border: #2a2e38;
+    --text: #e6e8ec;
+    --muted: #8a909c;
+    --accent: #4ea1ff;
+    --accent-hover: #6cb2ff;
+    --good: #3ecf6b;
+    --warn: #ffcc33;
+    --bad: #ff5c5c;
+    --shadow: rgba(0,0,0,0.4);
+  }
+  [data-theme="light"] {
+    --bg: #f4f6fa;
+    --card: #ffffff;
+    --card-border: #dfe3ea;
+    --text: #1a1d24;
+    --muted: #5a6170;
+    --accent: #2d7ff0;
+    --accent-hover: #1f6fe0;
+    --good: #1f9d4d;
+    --warn: #c79100;
+    --bad: #d83232;
+    --shadow: rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    transition: background 0.2s, color 0.2s;
+    line-height: 1.4;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--card-border);
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header h1 { font-size: 1.2rem; margin: 0; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 20px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    box-shadow: 0 2px 8px var(--shadow);
+  }
+  .card h2 { font-size: 1rem; margin: 0 0 12px; }
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+  }
+  .info-item { display: flex; flex-direction: column; gap: 2px; }
+  .info-item .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .info-item .value { font-size: 1.05rem; font-weight: 600; }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover:not(:disabled) { background: var(--accent-hover); }
+  button:disabled { opacity: 0.55; cursor: not-allowed; }
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--card-border);
+  }
+  .btn-secondary:hover:not(:disabled) { background: var(--card-border); }
+  .result {
+    margin-top: 12px;
+    font-size: 0.85rem;
+    min-height: 20px;
+  }
+  .result .err { color: var(--bad); }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .stat { background: var(--bg); border-radius: 8px; padding: 6px 8px; text-align: center; }
+  .stat .s-label { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; }
+  .stat .s-val { font-size: 0.95rem; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.78rem; }
+  th, td { text-align: right; padding: 3px 6px; border-bottom: 1px solid var(--card-border); }
+  th:first-child, td:first-child { text-align: left; }
+  .scroll-table { max-height: 160px; overflow-y: auto; }
+  .progress {
+    height: 8px;
+    background: var(--card-border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 8px;
+    display: none;
+  }
+  .progress .bar { height: 100%; width: 0; background: var(--accent); transition: width 0.1s; }
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid var(--card-border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-left: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .rssi-good { color: var(--good); }
+  .rssi-warn { color: var(--warn); }
+  .rssi-bad { color: var(--bad); }
+  canvas { width: 100%; height: 80px; display: block; margin-top: 10px; background: var(--bg); border-radius: 8px; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .big-num { font-size: 1.6rem; font-weight: 700; }
+</style>
+</head>
+<body data-theme="dark">
+<header>
+  <h1>ESP32-C3 WiFi Benchmark</h1>
+  <button id="themeToggle" class="btn-secondary">Light mode</button>
+</header>
+
+<div class="wrap">
+  <div class="card" style="margin-bottom:16px;">
+    <h2>Device Info</h2>
+    <div class="info-grid" id="infoGrid">
+      <div class="info-item"><span class="label">Status</span><span class="value">Loading…</span></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Latency -->
+    <div class="card">
+      <h2>Latency / Ping</h2>
+      <button id="btnPing">Run (20×)</button>
+      <div class="progress" id="pingProg"><div class="bar"></div></div>
+      <div class="result" id="pingResult"></div>
+    </div>
+
+    <!-- Download -->
+    <div class="card">
+      <h2>Download Throughput</h2>
+      <button id="btnDl">Run (512 KB)</button>
+      <div class="progress" id="dlProg"><div class="bar"></div></div>
+      <div class="result" id="dlResult"></div>
+    </div>
+
+    <!-- Upload -->
+    <div class="card">
+      <h2>Upload Throughput</h2>
+      <button id="btnUl">Run (256 KB)</button>
+      <div class="progress" id="ulProg"><div class="bar"></div></div>
+      <div class="result" id="ulResult"></div>
+    </div>
+
+    <!-- WebSocket -->
+    <div class="card">
+      <h2>WebSocket Jitter</h2>
+      <button id="btnWs">Run (50×)</button>
+      <div class="progress" id="wsProg"><div class="bar"></div></div>
+      <div class="result" id="wsResult"></div>
+    </div>
+
+    <!-- Auto-ping -->
+    <div class="card" style="grid-column: 1 / -1;">
+      <h2>Auto-Ping (live)</h2>
+      <div class="row">
+        <button id="btnAuto">Start</button>
+        <div>RSSI: <span id="autoRssi" class="big-num">—</span> dBm</div>
+      </div>
+      <canvas id="spark" width="900" height="80"></canvas>
+      <div class="result" id="autoResult"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+
+// ---------- Theme ----------
+const themeBtn = $("themeToggle");
+themeBtn.addEventListener("click", () => {
+  const cur = document.body.getAttribute("data-theme");
+  const next = cur === "dark" ? "light" : "dark";
+  document.body.setAttribute("data-theme", next);
+  themeBtn.textContent = next === "dark" ? "Light mode" : "Dark mode";
+});
+
+// ---------- Helpers ----------
+function rssiClass(rssi) {
+  if (rssi === null || rssi === undefined) return "";
+  if (rssi >= -60) return "rssi-good";
+  if (rssi >= -75) return "rssi-warn";
+  return "rssi-bad";
+}
+function fmt(n, d = 2) { return Number(n).toFixed(d); }
+function stddev(arr) {
+  if (arr.length < 2) return 0;
+  const m = arr.reduce((a, b) => a + b, 0) / arr.length;
+  const v = arr.reduce((a, b) => a + (b - m) * (b - m), 0) / arr.length;
+  return Math.sqrt(v);
+}
+function showSpinner(el) { el.innerHTML = '<span class="spinner"></span> running…'; }
+function showErr(el, msg) { el.innerHTML = '<span class="err">Error: ' + msg + '</span>'; }
+function setProg(progEl, pct) {
+  progEl.style.display = "block";
+  progEl.querySelector(".bar").style.width = pct + "%";
+}
+function hideProg(progEl) {
+  progEl.style.display = "none";
+  progEl.querySelector(".bar").style.width = "0";
+}
+
+// ---------- Device Info ----------
+async function loadInfo() {
+  try {
+    const r = await fetch("/api/info", { cache: "no-store" });
+    const d = await r.json();
+    const rssiTxt = (d.rssi === null || d.rssi === undefined)
+      ? "—"
+      : '<span class="' + rssiClass(d.rssi) + '">' + d.rssi + " dBm</span>";
+    $("infoGrid").innerHTML = `
+      <div class="info-item"><span class="label">IP</span><span class="value">${d.ip}</span></div>
+      <div class="info-item"><span class="label">Mode</span><span class="value">${d.wifi_mode}</span></div>
+      <div class="info-item"><span class="label">SSID</span><span class="value">${d.ssid}</span></div>
+      <div class="info-item"><span class="label">RSSI</span><span class="value">${rssiTxt}</span></div>
+      <div class="info-item"><span class="label">Free Heap</span><span class="value">${(d.free_heap/1024).toFixed(1)} KB</span></div>
+      <div class="info-item"><span class="label">Chip</span><span class="value">${d.chip} @ ${d.freq_mhz} MHz</span></div>`;
+  } catch (e) {
+    $("infoGrid").innerHTML = '<div class="info-item"><span class="label">Status</span><span class="value err">Info fetch failed</span></div>';
+  }
+}
+loadInfo();
+setInterval(loadInfo, 10000);
+
+// ---------- Latency / Ping ----------
+$("btnPing").addEventListener("click", async () => {
+  const btn = $("btnPing"), res = $("pingResult"), prog = $("pingProg");
+  btn.disabled = true; showSpinner(res);
+  const N = 20, rtts = [], rows = []; let lastRssi = null;
+  try {
+    for (let i = 0; i < N; i++) {
+      const t0 = performance.now();
+      const r = await fetch("/api/ping", { cache: "no-store" });
+      const d = await r.json();
+      const rtt = performance.now() - t0;
+      rtts.push(rtt);
+      lastRssi = d.rssi;
+      rows.push(`<tr><td>${i + 1}</td><td>${fmt(rtt)}</td></tr>`);
+      setProg(prog, ((i + 1) / N) * 100);
+    }
+    const min = Math.min(...rtts), max = Math.max(...rtts);
+    const avg = rtts.reduce((a, b) => a + b, 0) / rtts.length;
+    const jit = stddev(rtts);
+    res.innerHTML = `
+      <div class="stats">
+        <div class="stat"><div class="s-label">Min</div><div class="s-val">${fmt(min)} ms</div></div>
+        <div class="stat"><div class="s-label">Avg</div><div class="s-val">${fmt(avg)} ms</div></div>
+        <div class="stat"><div class="s-label">Max</div><div class="s-val">${fmt(max)} ms</div></div>
+        <div class="stat"><div class="s-label">Jitter</div><div class="s-val">${fmt(jit)} ms</div></div>
+        <div class="stat"><div class="s-label">RSSI</div><div class="s-val ${rssiClass(lastRssi)}">${lastRssi} dBm</div></div>
+      </div>
+      <div class="scroll-table"><table><thead><tr><th>#</th><th>RTT (ms)</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
+  } catch (e) {
+    showErr(res, e.message);
+  } finally {
+    hideProg(prog); btn.disabled = false;
+  }
+});
+
+// ---------- Download ----------
+$("btnDl").addEventListener("click", async () => {
+  const btn = $("btnDl"), res = $("dlResult"), prog = $("dlProg");
+  btn.disabled = true; showSpinner(res);
+  const SIZE = 524288;
+  try {
+    const t0 = performance.now();
+    const r = await fetch("/dl/" + SIZE, { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const reader = r.body.getReader();
+    let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.length;
+      setProg(prog, Math.min(100, (received / SIZE) * 100));
+    }
+    const secs = (performance.now() - t0) / 1000;
+    const mbps = (received * 8) / secs / 1e6;
+    res.innerHTML = `
+      <div class="stats">
+        <div class="stat"><div class="s-label">Speed</div><div class="s-val">${fmt(mbps)} Mbps</div></div>
+        <div class="stat"><div class="s-label">Size</div><div class="s-val">${(received/1024).toFixed(0)} KB</div></div>
+        <div class="stat"><div class="s-label">Time</div><div class="s-val">${fmt(secs * 1000, 0)} ms</div></div>
+      </div>`;
+  } catch (e) {
+    showErr(res, e.message);
+  } finally {
+    hideProg(prog); btn.disabled = false;
+  }
+});
+
+// ---------- Upload ----------
+$("btnUl").addEventListener("click", async () => {
+  const btn = $("btnUl"), res = $("ulResult"), prog = $("ulProg");
+  btn.disabled = true; showSpinner(res);
+  const SIZE = 262144; // 256 KB
+  try {
+    const buf = new Uint8Array(SIZE).fill(0xAA);
+    setProg(prog, 30);
+    const t0 = performance.now();
+    const r = await fetch("/ul", {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: buf,
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    setProg(prog, 100);
+    const secs = (performance.now() - t0) / 1000;
+    const mbps = (SIZE * 8) / secs / 1e6;
+    res.innerHTML = `
+      <div class="stats">
+        <div class="stat"><div class="s-label">Speed</div><div class="s-val">${fmt(mbps)} Mbps</div></div>
+        <div class="stat"><div class="s-label">Sent</div><div class="s-val">${(SIZE/1024).toFixed(0)} KB</div></div>
+        <div class="stat"><div class="s-label">Recv'd</div><div class="s-val">${(d.received/1024).toFixed(0)} KB</div></div>
+        <div class="stat"><div class="s-label">Time</div><div class="s-val">${fmt(secs * 1000, 0)} ms</div></div>
+      </div>`;
+  } catch (e) {
+    showErr(res, e.message);
+  } finally {
+    hideProg(prog); btn.disabled = false;
+  }
+});
+
+// ---------- WebSocket Jitter ----------
+$("btnWs").addEventListener("click", () => {
+  const btn = $("btnWs"), res = $("wsResult"), prog = $("wsProg");
+  btn.disabled = true; showSpinner(res);
+  const N = 50, rtts = [];
+  let count = 0, sentAt = 0;
+  let ws;
+  try {
+    ws = new WebSocket("ws://" + location.host + "/ws");
+  } catch (e) {
+    showErr(res, e.message); btn.disabled = false; return;
+  }
+  const finish = (errMsg) => {
+    try { ws.close(); } catch (e) {}
+    hideProg(prog); btn.disabled = false;
+    if (errMsg) { showErr(res, errMsg); return; }
+    const min = Math.min(...rtts), max = Math.max(...rtts);
+    const avg = rtts.reduce((a, b) => a + b, 0) / rtts.length;
+    const jit = stddev(rtts);
+    res.innerHTML = `
+      <div class="stats">
+        <div class="stat"><div class="s-label">Mean</div><div class="s-val">${fmt(avg)} ms</div></div>
+        <div class="stat"><div class="s-label">Min</div><div class="s-val">${fmt(min)} ms</div></div>
+        <div class="stat"><div class="s-label">Max</div><div class="s-val">${fmt(max)} ms</div></div>
+        <div class="stat"><div class="s-label">Jitter</div><div class="s-val">${fmt(jit)} ms</div></div>
+      </div>`;
+  };
+  const sendOne = () => {
+    sentAt = performance.now();
+    ws.send(JSON.stringify({ t: sentAt }));
+  };
+  ws.onopen = () => sendOne();
+  ws.onmessage = () => {
+    rtts.push(performance.now() - sentAt);
+    count++;
+    setProg(prog, (count / N) * 100);
+    if (count >= N) finish(null);
+    else sendOne();
+  };
+  ws.onerror = () => finish("WebSocket error");
+});
+
+// ---------- Auto-Ping + Sparkline ----------
+const spark = $("spark");
+const sctx = spark.getContext("2d");
+const MAX_POINTS = 200;
+let pts = [];
+let autoTimer = null;
+
+function drawSpark() {
+  const w = spark.width, h = spark.height;
+  sctx.clearRect(0, 0, w, h);
+  if (pts.length < 2) return;
+  const min = Math.min(...pts), max = Math.max(...pts);
+  const range = (max - min) || 1;
+  const step = w / (MAX_POINTS - 1);
+  const css = getComputedStyle(document.body);
+  sctx.strokeStyle = css.getPropertyValue("--accent").trim() || "#4ea1ff";
+  sctx.lineWidth = 2;
+  sctx.beginPath();
+  pts.forEach((v, i) => {
+    const x = i * step;
+    const y = h - ((v - min) / range) * (h - 8) - 4;
+    if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+  });
+  sctx.stroke();
+}
+
+async function autoTick() {
+  try {
+    const t0 = performance.now();
+    const r = await fetch("/api/ping", { cache: "no-store" });
+    const d = await r.json();
+    const rtt = performance.now() - t0;
+    pts.push(rtt);
+    if (pts.length > MAX_POINTS) pts.shift();
+    drawSpark();
+    const rssiEl = $("autoRssi");
+    rssiEl.textContent = d.rssi;
+    rssiEl.className = "big-num " + rssiClass(d.rssi);
+    $("autoResult").innerHTML = `Last RTT: ${fmt(rtt)} ms · samples: ${pts.length}/${MAX_POINTS}`;
+  } catch (e) {
+    $("autoResult").innerHTML = '<span class="err">Ping failed: ' + e.message + "</span>";
+  }
+}
+
+$("btnAuto").addEventListener("click", () => {
+  const btn = $("btnAuto");
+  if (autoTimer) {
+    clearInterval(autoTimer); autoTimer = null;
+    btn.textContent = "Start";
+  } else {
+    autoTick();
+    autoTimer = setInterval(autoTick, 5000);
+    btn.textContent = "Stop";
+  }
+});
+</script>
+</body>
+</html>
