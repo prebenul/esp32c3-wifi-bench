@@ -1,461 +1,1390 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ESP32-C3 WiFi Benchmark</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WiFi Bench — ESP32-C3</title>
 <style>
-  :root {
-    --bg: #0f1115;
-    --card: #1a1d24;
-    --card-border: #2a2e38;
-    --text: #e6e8ec;
-    --muted: #8a909c;
-    --accent: #4ea1ff;
-    --accent-hover: #6cb2ff;
-    --good: #3ecf6b;
-    --warn: #ffcc33;
-    --bad: #ff5c5c;
-    --shadow: rgba(0,0,0,0.4);
-  }
-  [data-theme="light"] {
-    --bg: #f4f6fa;
-    --card: #ffffff;
-    --card-border: #dfe3ea;
-    --text: #1a1d24;
-    --muted: #5a6170;
-    --accent: #2d7ff0;
-    --accent-hover: #1f6fe0;
-    --good: #1f9d4d;
-    --warn: #c79100;
-    --bad: #d83232;
-    --shadow: rgba(0,0,0,0.08);
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    transition: background 0.2s, color 0.2s;
-    line-height: 1.4;
-  }
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--card-border);
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-  header h1 { font-size: 1.2rem; margin: 0; }
-  .wrap { max-width: 960px; margin: 0 auto; padding: 20px; }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 16px;
-  }
-  .card {
-    background: var(--card);
-    border: 1px solid var(--card-border);
-    border-radius: 12px;
-    padding: 16px 18px;
-    box-shadow: 0 2px 8px var(--shadow);
-  }
-  .card h2 { font-size: 1rem; margin: 0 0 12px; }
-  .info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 10px;
-  }
-  .info-item { display: flex; flex-direction: column; gap: 2px; }
-  .info-item .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
-  .info-item .value { font-size: 1.05rem; font-weight: 600; }
-  button {
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 8px 14px;
-    font-size: 0.9rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  button:hover:not(:disabled) { background: var(--accent-hover); }
-  button:disabled { opacity: 0.55; cursor: not-allowed; }
-  .btn-secondary {
-    background: transparent;
-    color: var(--text);
-    border: 1px solid var(--card-border);
-  }
-  .btn-secondary:hover:not(:disabled) { background: var(--card-border); }
-  .result {
-    margin-top: 12px;
-    font-size: 0.85rem;
-    min-height: 20px;
-  }
-  .result .err { color: var(--bad); }
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
-    gap: 8px;
-    margin-top: 8px;
-  }
-  .stat { background: var(--bg); border-radius: 8px; padding: 6px 8px; text-align: center; }
-  .stat .s-label { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; }
-  .stat .s-val { font-size: 0.95rem; font-weight: 700; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.78rem; }
-  th, td { text-align: right; padding: 3px 6px; border-bottom: 1px solid var(--card-border); }
-  th:first-child, td:first-child { text-align: left; }
-  .scroll-table { max-height: 160px; overflow-y: auto; }
-  .progress {
-    height: 8px;
-    background: var(--card-border);
-    border-radius: 4px;
-    overflow: hidden;
-    margin-top: 8px;
-    display: none;
-  }
-  .progress .bar { height: 100%; width: 0; background: var(--accent); transition: width 0.1s; }
-  .spinner {
-    display: inline-block;
-    width: 14px; height: 14px;
-    border: 2px solid var(--card-border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-    vertical-align: middle;
-    margin-left: 6px;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .rssi-good { color: var(--good); }
-  .rssi-warn { color: var(--warn); }
-  .rssi-bad { color: var(--bad); }
-  canvas { width: 100%; height: 80px; display: block; margin-top: 10px; background: var(--bg); border-radius: 8px; }
-  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .big-num { font-size: 1.6rem; font-weight: 700; }
+/* ============================================================
+   CSS Variables & Theme
+   ============================================================ */
+:root {
+  --bg:      #0d0f14;
+  --card:    #161a23;
+  --border:  #252936;
+  --text:    #e2e6f0;
+  --muted:   #7a8299;
+  --accent:  #4f9eff;
+  --good:    #3ecf6b;
+  --warn:    #f5c842;
+  --bad:     #ff5059;
+  --radius:  8px;
+  --shadow:  0 2px 12px rgba(0,0,0,.35);
+}
+
+[data-theme="light"] {
+  --bg:      #f0f2f7;
+  --card:    #ffffff;
+  --border:  #d4d9e6;
+  --text:    #1a1d27;
+  --muted:   #5c6580;
+  --accent:  #1d72e8;
+  --good:    #1fa84a;
+  --warn:    #b58a00;
+  --bad:     #d42630;
+  --shadow:  0 2px 12px rgba(0,0,0,.10);
+}
+
+/* ============================================================
+   Base Reset & Global
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 16px; }
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 24px 16px 48px;
+  transition: background .25s, color .25s;
+}
+
+/* ============================================================
+   Layout
+   ============================================================ */
+.page-wrap {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+/* ============================================================
+   Header
+   ============================================================ */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 12px;
+}
+
+.header-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: var(--text);
+}
+
+.header-title span {
+  color: var(--accent);
+}
+
+.theme-btn {
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 7px 16px;
+  font-size: .85rem;
+  cursor: pointer;
+  transition: background .2s, border-color .2s;
+  white-space: nowrap;
+}
+.theme-btn:hover { background: var(--border); }
+
+/* ============================================================
+   Cards
+   ============================================================ */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow);
+  transition: background .25s, border-color .25s;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+
+/* ============================================================
+   Grid for test cards
+   ============================================================ */
+.tests-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+@media (max-width: 640px) {
+  .tests-grid { grid-template-columns: 1fr; }
+}
+
+.card-full { grid-column: 1 / -1; }
+
+/* ============================================================
+   Device Info Badges
+   ============================================================ */
+.info-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 36px;
+}
+
+.info-pill {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 5px 14px;
+  min-width: 80px;
+}
+
+.info-pill-label {
+  font-size: .7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  line-height: 1;
+  margin-bottom: 3px;
+}
+
+.info-pill-value {
+  font-size: .88rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.info-pill-value.good { color: var(--good); }
+.info-pill-value.warn { color: var(--warn); }
+.info-pill-value.bad  { color: var(--bad); }
+
+/* ============================================================
+   Run Button & Spinner
+   ============================================================ */
+.run-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 7px 18px;
+  font-size: .85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .2s;
+  white-space: nowrap;
+}
+.run-btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.run-btn:not(:disabled):hover { opacity: .88; }
+
+.toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--good);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 7px 18px;
+  font-size: .85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .2s, background .2s;
+  white-space: nowrap;
+}
+.toggle-btn.active { background: var(--bad); }
+.toggle-btn:hover { opacity: .88; }
+
+/* Spinner */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255,255,255,.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+
+/* ============================================================
+   Progress Bar
+   ============================================================ */
+.progress-wrap {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 14px;
+  display: none;
+}
+.progress-wrap.visible { display: block; }
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width .1s;
+  width: 0%;
+}
+
+/* ============================================================
+   Result / Error area
+   ============================================================ */
+.result-area {
+  font-size: .82rem;
+  color: var(--muted);
+  margin-bottom: 14px;
+  min-height: 20px;
+}
+.result-area.error { color: var(--bad); }
+
+/* ============================================================
+   Stat Row
+   ============================================================ */
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-label {
+  font-size: .7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.stat-value {
+  font-size: .95rem;
+  font-weight: 600;
+}
+
+/* ============================================================
+   Canvas containers
+   ============================================================ */
+.chart-wrap {
+  display: none;
+  width: 100%;
+  margin-bottom: 4px;
+}
+.chart-wrap.visible { display: block; }
+
+canvas.chart-canvas {
+  display: block;
+  width: 100%;
+  border-radius: 4px;
+}
+
+/* ============================================================
+   Live monitor extras
+   ============================================================ */
+.live-status {
+  margin-top: 12px;
+  font-size: .85rem;
+  color: var(--muted);
+}
+.live-rssi {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-top: 8px;
+}
 </style>
 </head>
-<body data-theme="dark">
-<header>
-  <h1>ESP32-C3 WiFi Benchmark</h1>
-  <button id="themeToggle" class="btn-secondary">Light mode</button>
-</header>
+<body>
+<div class="page-wrap">
 
-<div class="wrap">
-  <div class="card" style="margin-bottom:16px;">
-    <h2>Device Info</h2>
-    <div class="info-grid" id="infoGrid">
-      <div class="info-item"><span class="label">Status</span><span class="value">Loading…</span></div>
+  <!-- ============================================================
+       Header
+       ============================================================ -->
+  <header class="header">
+    <h1 class="header-title">WiFi Bench &mdash; <span>ESP32-C3</span></h1>
+    <button class="theme-btn" id="themeToggle" aria-label="Toggle theme">Light Mode</button>
+  </header>
+
+  <!-- ============================================================
+       Device Info Card
+       ============================================================ -->
+  <section class="card" id="infoCard">
+    <div class="card-header">
+      <h2 class="card-title">Device Info</h2>
+      <span id="infoStatus" style="font-size:.78rem;color:var(--muted)">Refreshing every 10 s</span>
     </div>
-  </div>
-
-  <div class="grid">
-    <!-- Latency -->
-    <div class="card">
-      <h2>Latency / Ping</h2>
-      <button id="btnPing">Run (20×)</button>
-      <div class="progress" id="pingProg"><div class="bar"></div></div>
-      <div class="result" id="pingResult"></div>
+    <div class="info-row" id="infoRow">
+      <span style="color:var(--muted);font-size:.85rem">Waiting for /api/info…</span>
     </div>
+  </section>
 
-    <!-- Download -->
-    <div class="card">
-      <h2>Download Throughput</h2>
-      <button id="btnDl">Run (512 KB)</button>
-      <div class="progress" id="dlProg"><div class="bar"></div></div>
-      <div class="result" id="dlResult"></div>
-    </div>
+  <!-- ============================================================
+       Test Cards Grid
+       ============================================================ -->
+  <div class="tests-grid">
 
-    <!-- Upload -->
-    <div class="card">
-      <h2>Upload Throughput</h2>
-      <button id="btnUl">Run (256 KB)</button>
-      <div class="progress" id="ulProg"><div class="bar"></div></div>
-      <div class="result" id="ulResult"></div>
-    </div>
-
-    <!-- WebSocket -->
-    <div class="card">
-      <h2>WebSocket Jitter</h2>
-      <button id="btnWs">Run (50×)</button>
-      <div class="progress" id="wsProg"><div class="bar"></div></div>
-      <div class="result" id="wsResult"></div>
-    </div>
-
-    <!-- Auto-ping -->
-    <div class="card" style="grid-column: 1 / -1;">
-      <h2>Auto-Ping (live)</h2>
-      <div class="row">
-        <button id="btnAuto">Start</button>
-        <div>RSSI: <span id="autoRssi" class="big-num">—</span> dBm</div>
+    <!-- Test 1: Latency (Ping) -->
+    <div class="card" id="card-ping">
+      <div class="card-header">
+        <h2 class="card-title">Latency (Ping)</h2>
+        <button class="run-btn" id="btn-ping">Run</button>
       </div>
-      <canvas id="spark" width="900" height="80"></canvas>
-      <div class="result" id="autoResult"></div>
+      <div class="progress-wrap" id="prog-ping"><div class="progress-bar" id="progbar-ping"></div></div>
+      <div class="result-area" id="result-ping">Press Run to start 20 pings.</div>
+      <div class="chart-wrap" id="wrap-ping">
+        <canvas class="chart-canvas" id="canvas-ping" height="200"></canvas>
+      </div>
+      <div class="stat-row" id="stats-ping" style="display:none">
+        <div class="stat-item"><span class="stat-label">Min</span><span class="stat-value" id="s-ping-min">—</span></div>
+        <div class="stat-item"><span class="stat-label">Avg</span><span class="stat-value" id="s-ping-avg">—</span></div>
+        <div class="stat-item"><span class="stat-label">Max</span><span class="stat-value" id="s-ping-max">—</span></div>
+        <div class="stat-item"><span class="stat-label">Jitter</span><span class="stat-value" id="s-ping-jitter">—</span></div>
+        <div class="stat-item"><span class="stat-label">RSSI</span><span class="stat-value" id="s-ping-rssi">—</span></div>
+      </div>
     </div>
-  </div>
-</div>
+
+    <!-- Test 2: Download -->
+    <div class="card" id="card-dl">
+      <div class="card-header">
+        <h2 class="card-title">Download Throughput</h2>
+        <button class="run-btn" id="btn-dl">Run</button>
+      </div>
+      <div class="result-area" id="result-dl">Press Run to fetch 512 KB.</div>
+      <div class="chart-wrap" id="wrap-dl">
+        <canvas class="chart-canvas" id="canvas-dl" height="80"></canvas>
+      </div>
+      <div class="stat-row" id="stats-dl" style="display:none">
+        <div class="stat-item"><span class="stat-label">Speed</span><span class="stat-value" id="s-dl-speed">—</span></div>
+        <div class="stat-item"><span class="stat-label">Size</span><span class="stat-value" id="s-dl-size">—</span></div>
+        <div class="stat-item"><span class="stat-label">Time</span><span class="stat-value" id="s-dl-time">—</span></div>
+      </div>
+    </div>
+
+    <!-- Test 3: Upload -->
+    <div class="card" id="card-ul">
+      <div class="card-header">
+        <h2 class="card-title">Upload Throughput</h2>
+        <button class="run-btn" id="btn-ul">Run</button>
+      </div>
+      <div class="result-area" id="result-ul">Press Run to POST 256 KB.</div>
+      <div class="chart-wrap" id="wrap-ul">
+        <canvas class="chart-canvas" id="canvas-ul" height="80"></canvas>
+      </div>
+      <div class="stat-row" id="stats-ul" style="display:none">
+        <div class="stat-item"><span class="stat-label">Speed</span><span class="stat-value" id="s-ul-speed">—</span></div>
+        <div class="stat-item"><span class="stat-label">Sent</span><span class="stat-value" id="s-ul-sent">—</span></div>
+        <div class="stat-item"><span class="stat-label">Received</span><span class="stat-value" id="s-ul-recv">—</span></div>
+        <div class="stat-item"><span class="stat-label">Time</span><span class="stat-value" id="s-ul-time">—</span></div>
+      </div>
+    </div>
+
+    <!-- Test 4: WebSocket Jitter -->
+    <div class="card" id="card-ws">
+      <div class="card-header">
+        <h2 class="card-title">WebSocket Jitter</h2>
+        <button class="run-btn" id="btn-ws">Run</button>
+      </div>
+      <div class="result-area" id="result-ws">Press Run to send 50 WS messages.</div>
+      <div class="chart-wrap" id="wrap-ws">
+        <canvas class="chart-canvas" id="canvas-ws" height="200"></canvas>
+      </div>
+      <div class="stat-row" id="stats-ws" style="display:none">
+        <div class="stat-item"><span class="stat-label">Mean</span><span class="stat-value" id="s-ws-mean">—</span></div>
+        <div class="stat-item"><span class="stat-label">Min</span><span class="stat-value" id="s-ws-min">—</span></div>
+        <div class="stat-item"><span class="stat-label">Max</span><span class="stat-value" id="s-ws-max">—</span></div>
+        <div class="stat-item"><span class="stat-label">Jitter</span><span class="stat-value" id="s-ws-jitter">—</span></div>
+      </div>
+    </div>
+
+    <!-- Test 5: Auto-ping Live Monitor (full-width) -->
+    <div class="card card-full" id="card-live">
+      <div class="card-header">
+        <h2 class="card-title">Auto-ping — Live Monitor</h2>
+        <button class="toggle-btn" id="btn-live">Start</button>
+      </div>
+      <div class="result-area" id="result-live">Press Start to begin live monitoring (ping every 5 s).</div>
+      <div class="chart-wrap visible" id="wrap-live">
+        <canvas class="chart-canvas" id="canvas-live" height="180"></canvas>
+      </div>
+      <div class="live-status" id="live-status">Last RTT: — &nbsp;&middot;&nbsp; RSSI: — &nbsp;&middot;&nbsp; samples: 0 / 200</div>
+      <div class="live-rssi" id="live-rssi" style="color:var(--muted)">—</div>
+    </div>
+
+  </div><!-- /tests-grid -->
+</div><!-- /page-wrap -->
 
 <script>
 "use strict";
 
-const $ = (id) => document.getElementById(id);
+/* ============================================================
+   Utilities
+   ============================================================ */
 
-// ---------- Theme ----------
-const themeBtn = $("themeToggle");
-themeBtn.addEventListener("click", () => {
-  const cur = document.body.getAttribute("data-theme");
-  const next = cur === "dark" ? "light" : "dark";
-  document.body.setAttribute("data-theme", next);
-  themeBtn.textContent = next === "dark" ? "Light mode" : "Dark mode";
-});
-
-// ---------- Helpers ----------
-function rssiClass(rssi) {
-  if (rssi === null || rssi === undefined) return "";
-  if (rssi >= -60) return "rssi-good";
-  if (rssi >= -75) return "rssi-warn";
-  return "rssi-bad";
+/** Read a CSS variable value from :root at the current theme */
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
-function fmt(n, d = 2) { return Number(n).toFixed(d); }
-function stddev(arr) {
+
+/** Set physical canvas pixel dimensions matching its CSS layout size */
+function fitCanvas(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const dpr  = window.devicePixelRatio || 1;
+  const w    = Math.round(rect.width  || canvas.parentElement.clientWidth || 400);
+  const h    = Math.round(rect.height || parseInt(canvas.getAttribute("height") || 200));
+  if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+    canvas.width  = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width  = w + "px";
+    canvas.style.height = h + "px";
+    const ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+    return { ctx, w, h };
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w, h };
+}
+
+/** Format ms value */
+function fmtMs(v) { return v.toFixed(2) + " ms"; }
+
+/** Standard deviation */
+function stdDev(arr) {
   if (arr.length < 2) return 0;
-  const m = arr.reduce((a, b) => a + b, 0) / arr.length;
-  const v = arr.reduce((a, b) => a + (b - m) * (b - m), 0) / arr.length;
-  return Math.sqrt(v);
-}
-function showSpinner(el) { el.innerHTML = '<span class="spinner"></span> running…'; }
-function showErr(el, msg) { el.innerHTML = '<span class="err">Error: ' + msg + '</span>'; }
-function setProg(progEl, pct) {
-  progEl.style.display = "block";
-  progEl.querySelector(".bar").style.width = pct + "%";
-}
-function hideProg(progEl) {
-  progEl.style.display = "none";
-  progEl.querySelector(".bar").style.width = "0";
+  const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+  return Math.sqrt(arr.reduce((s, x) => s + (x - avg) ** 2, 0) / arr.length);
 }
 
-// ---------- Device Info ----------
-async function loadInfo() {
-  try {
-    const r = await fetch("/api/info", { cache: "no-store" });
-    const d = await r.json();
-    const rssiTxt = (d.rssi === null || d.rssi === undefined)
-      ? "—"
-      : '<span class="' + rssiClass(d.rssi) + '">' + d.rssi + " dBm</span>";
-    $("infoGrid").innerHTML = `
-      <div class="info-item"><span class="label">IP</span><span class="value">${d.ip}</span></div>
-      <div class="info-item"><span class="label">Mode</span><span class="value">${d.wifi_mode}</span></div>
-      <div class="info-item"><span class="label">SSID</span><span class="value">${d.ssid}</span></div>
-      <div class="info-item"><span class="label">RSSI</span><span class="value">${rssiTxt}</span></div>
-      <div class="info-item"><span class="label">Free Heap</span><span class="value">${(d.free_heap/1024).toFixed(1)} KB</span></div>
-      <div class="info-item"><span class="label">Chip</span><span class="value">${d.chip} @ ${d.freq_mhz} MHz</span></div>`;
-  } catch (e) {
-    $("infoGrid").innerHTML = '<div class="info-item"><span class="label">Status</span><span class="value err">Info fetch failed</span></div>';
+/** Color-code RSSI */
+function rssiClass(rssi) {
+  if (rssi >= -60) return "good";
+  if (rssi >= -75) return "warn";
+  return "bad";
+}
+
+/* ============================================================
+   Reusable Chart: drawLineChart(canvas, data, opts)
+   ============================================================ */
+
+/**
+ * @param {HTMLCanvasElement} canvas
+ * @param {number[]} data        - array of Y values
+ * @param {object}  opts
+ *   lineColor    - CSS color string (default --accent)
+ *   gridLines    - number of horizontal grid lines (default 5)
+ *   refLines     - [{value, color, label}]   optional dashed reference lines
+ *   xLabels      - [1,5,10,15,20] sparse X labels
+ *   yUnit        - string appended to Y labels e.g. " ms"
+ */
+function drawLineChart(canvas, data, opts = {}) {
+  if (!data || data.length === 0) return;
+  const { ctx, w, h } = fitCanvas(canvas);
+
+  const PAD_LEFT   = 52;
+  const PAD_RIGHT  = 16;
+  const PAD_TOP    = 18;
+  const PAD_BOTTOM = 28;
+  const plotW = w - PAD_LEFT - PAD_RIGHT;
+  const plotH = h - PAD_TOP - PAD_BOTTOM;
+
+  const lineColor  = opts.lineColor  || cssVar("--accent");
+  const gridColor  = "rgba(127,127,127,0.15)";
+  const textColor  = cssVar("--muted");
+  const gridLines  = opts.gridLines  || 5;
+  const yUnit      = opts.yUnit      !== undefined ? opts.yUnit : " ms";
+
+  // Auto-scale
+  let yMin = Math.min(...data);
+  let yMax = Math.max(...data);
+  if (opts.refLines) {
+    opts.refLines.forEach(r => {
+      if (r.value < yMin) yMin = r.value;
+      if (r.value > yMax) yMax = r.value;
+    });
+  }
+  const range = yMax - yMin || 1;
+  const pad   = range * 0.15;
+  const yLo   = yMin - pad;
+  const yHi   = yMax + pad;
+  const yRange = yHi - yLo;
+
+  function toX(i)   { return PAD_LEFT + (i / (data.length - 1 || 1)) * plotW; }
+  function toY(val) { return PAD_TOP  + (1 - (val - yLo) / yRange) * plotH; }
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Grid lines + Y labels
+  ctx.strokeStyle = gridColor;
+  ctx.lineWidth   = 1;
+  ctx.font        = `11px system-ui, sans-serif`;
+  ctx.fillStyle   = textColor;
+  ctx.textAlign   = "right";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i <= gridLines; i++) {
+    const val = yLo + (i / gridLines) * yRange;
+    const y   = PAD_TOP + (1 - i / gridLines) * plotH;
+    ctx.beginPath();
+    ctx.moveTo(PAD_LEFT, y);
+    ctx.lineTo(PAD_LEFT + plotW, y);
+    ctx.stroke();
+    ctx.fillText(val.toFixed(1) + yUnit, PAD_LEFT - 4, y);
+  }
+
+  // X axis labels
+  const xLabels = opts.xLabels || null;
+  ctx.textAlign    = "center";
+  ctx.textBaseline = "top";
+  ctx.fillStyle    = textColor;
+  if (xLabels) {
+    xLabels.forEach(lbl => {
+      const i = lbl - 1;
+      if (i < 0 || i >= data.length) return;
+      ctx.fillText(String(lbl), toX(i), PAD_TOP + plotH + 5);
+    });
+  } else {
+    // Auto: ~5 labels
+    const step = Math.ceil(data.length / 5);
+    for (let i = 0; i < data.length; i += step) {
+      ctx.fillText(String(i + 1), toX(i), PAD_TOP + plotH + 5);
+    }
+    ctx.fillText(String(data.length), toX(data.length - 1), PAD_TOP + plotH + 5);
+  }
+
+  // Gradient fill
+  const grad = ctx.createLinearGradient(0, PAD_TOP, 0, PAD_TOP + plotH);
+  grad.addColorStop(0, lineColor.replace(")", ", 0.35)").replace("rgb(", "rgba(").replace("#", "rgba_hex_"));
+  // Safe gradient: just alpha variants
+  grad.addColorStop(0, hexToRgba(lineColor, 0.35));
+  grad.addColorStop(1, hexToRgba(lineColor, 0.03));
+
+  ctx.beginPath();
+  ctx.moveTo(toX(0), PAD_TOP + plotH);
+  for (let i = 0; i < data.length; i++) {
+    ctx.lineTo(toX(i), toY(data[i]));
+  }
+  ctx.lineTo(toX(data.length - 1), PAD_TOP + plotH);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth   = 2;
+  ctx.lineJoin    = "round";
+  for (let i = 0; i < data.length; i++) {
+    if (i === 0) ctx.moveTo(toX(i), toY(data[i]));
+    else         ctx.lineTo(toX(i), toY(data[i]));
+  }
+  ctx.stroke();
+
+  // Dots
+  for (let i = 0; i < data.length; i++) {
+    ctx.beginPath();
+    ctx.arc(toX(i), toY(data[i]), 3, 0, Math.PI * 2);
+    ctx.fillStyle = lineColor;
+    ctx.fill();
+  }
+
+  // Optional reference lines (dashed)
+  if (opts.refLines) {
+    ctx.font        = "11px system-ui, sans-serif";
+    ctx.textAlign   = "right";
+    ctx.textBaseline = "middle";
+    ctx.setLineDash([4, 4]);
+    opts.refLines.forEach(ref => {
+      const y = toY(ref.value);
+      if (y < PAD_TOP - 2 || y > PAD_TOP + plotH + 2) return;
+      ctx.strokeStyle = ref.color;
+      ctx.lineWidth   = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(PAD_LEFT, y);
+      ctx.lineTo(PAD_LEFT + plotW, y);
+      ctx.stroke();
+      ctx.fillStyle = ref.color;
+      ctx.fillText(ref.label, PAD_LEFT + plotW, y - 6);
+    });
+    ctx.setLineDash([]);
   }
 }
-loadInfo();
-setInterval(loadInfo, 10000);
 
-// ---------- Latency / Ping ----------
-$("btnPing").addEventListener("click", async () => {
-  const btn = $("btnPing"), res = $("pingResult"), prog = $("pingProg");
-  btn.disabled = true; showSpinner(res);
-  const N = 20, rtts = [], rows = []; let lastRssi = null;
+/** Convert hex color or CSS named var result to rgba */
+function hexToRgba(hex, alpha) {
+  hex = hex.trim();
+  // Handle rgb/rgba passthrough
+  if (hex.startsWith("rgb")) {
+    const m = hex.match(/[\d.]+/g);
+    if (m && m.length >= 3) return `rgba(${m[0]},${m[1]},${m[2]},${alpha})`;
+  }
+  // Handle 3 or 6 char hex
+  let r = 0, g = 0, b = 0;
+  if (hex.length === 4) {
+    r = parseInt(hex[1] + hex[1], 16);
+    g = parseInt(hex[2] + hex[2], 16);
+    b = parseInt(hex[3] + hex[3], 16);
+  } else if (hex.length === 7) {
+    r = parseInt(hex.slice(1, 3), 16);
+    g = parseInt(hex.slice(3, 5), 16);
+    b = parseInt(hex.slice(5, 7), 16);
+  }
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/* ============================================================
+   Reusable Chart: drawGaugeBar(canvas, value, max, label, opts)
+   ============================================================ */
+
+/**
+ * @param {HTMLCanvasElement} canvas
+ * @param {number} value   - measured value
+ * @param {number} max     - scale maximum
+ * @param {string} label   - unit string e.g. "Mbps"
+ * @param {object} opts
+ *   timeMs        - optional secondary bar value (0–5000ms)
+ *   timeMax       - max for time bar (default 5000)
+ */
+function drawGaugeBar(canvas, value, max, label, opts = {}) {
+  const { ctx, w, h } = fitCanvas(canvas);
+  ctx.clearRect(0, 0, w, h);
+
+  const PAD_H = 18;
+  const PAD_V = 12;
+  const barH  = 28;
+  const textColor  = cssVar("--text");
+  const mutedColor = cssVar("--muted");
+  const accentColor = cssVar("--accent");
+  const goodColor   = cssVar("--good");
+  const borderColor = cssVar("--border");
+
+  // --- Main gauge bar ---
+  const barY = PAD_V;
+  const barW = w - PAD_H * 2;
+
+  // Background track
+  ctx.fillStyle = cssVar("--bg");
+  roundRect(ctx, PAD_H, barY, barW, barH, 6);
+  ctx.fill();
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 1;
+  roundRect(ctx, PAD_H, barY, barW, barH, 6);
+  ctx.stroke();
+
+  // Filled portion
+  const fillW = Math.min(1, value / max) * barW;
+  if (fillW > 0) {
+    const grad = ctx.createLinearGradient(PAD_H, 0, PAD_H + fillW, 0);
+    grad.addColorStop(0, accentColor);
+    grad.addColorStop(1, goodColor);
+    ctx.save();
+    ctx.beginPath();
+    roundRect(ctx, PAD_H, barY, barW, barH, 6);
+    ctx.clip();
+    ctx.fillStyle = grad;
+    ctx.fillRect(PAD_H, barY, fillW, barH);
+    ctx.restore();
+  }
+
+  // Value label (centered)
+  ctx.font         = `bold 13px system-ui, sans-serif`;
+  ctx.fillStyle    = value > 0 ? "#fff" : mutedColor;
+  ctx.textAlign    = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`${value.toFixed(2)} ${label}`, PAD_H + barW / 2, barY + barH / 2);
+
+  // Scale labels
+  ctx.font      = `10px system-ui, sans-serif`;
+  ctx.fillStyle = mutedColor;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText(`0 ${label}`, PAD_H, barY + barH + 3);
+  ctx.textAlign = "right";
+  ctx.fillText(`${max} ${label}`, PAD_H + barW, barY + barH + 3);
+
+  // --- Optional time bar ---
+  if (opts.timeMs !== undefined) {
+    const tMax = opts.timeMax || 5000;
+    const tBarH = 12;
+    const tBarY = barY + barH + 20;
+    const tFillW = Math.min(1, opts.timeMs / tMax) * barW;
+
+    ctx.fillStyle = cssVar("--bg");
+    roundRect(ctx, PAD_H, tBarY, barW, tBarH, 4);
+    ctx.fill();
+    ctx.strokeStyle = borderColor;
+    roundRect(ctx, PAD_H, tBarY, barW, tBarH, 4);
+    ctx.stroke();
+
+    if (tFillW > 0) {
+      ctx.save();
+      ctx.beginPath();
+      roundRect(ctx, PAD_H, tBarY, barW, tBarH, 4);
+      ctx.clip();
+      ctx.fillStyle = accentColor;
+      ctx.fillRect(PAD_H, tBarY, tFillW, tBarH);
+      ctx.restore();
+    }
+
+    ctx.font      = `10px system-ui, sans-serif`;
+    ctx.fillStyle = mutedColor;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`${opts.timeMs.toFixed(0)} ms transfer time`, PAD_H + barW / 2, tBarY + tBarH / 2);
+
+    ctx.textAlign    = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("0 ms", PAD_H, tBarY + tBarH + 3);
+    ctx.textAlign = "right";
+    ctx.fillText(`${tMax} ms`, PAD_H + barW, tBarY + tBarH + 3);
+  }
+}
+
+/** Reusable rounded rect path helper */
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+/* ============================================================
+   Theme Toggle
+   ============================================================ */
+
+let currentTheme = "dark";
+
+// Stored chart redraw callbacks
+const chartRedrawers = [];
+
+function registerRedrawer(fn) { chartRedrawers.push(fn); }
+
+function redrawAllCharts() {
+  chartRedrawers.forEach(fn => { try { fn(); } catch(_) {} });
+}
+
+document.getElementById("themeToggle").addEventListener("click", () => {
+  currentTheme = currentTheme === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", currentTheme);
+  document.getElementById("themeToggle").textContent =
+    currentTheme === "dark" ? "Light Mode" : "Dark Mode";
+  // Small delay for CSS vars to update before redrawing
+  requestAnimationFrame(() => {
+    requestAnimationFrame(redrawAllCharts);
+  });
+});
+
+/* ============================================================
+   Device Info (auto-refresh every 10 s)
+   ============================================================ */
+
+async function fetchDeviceInfo() {
+  const row    = document.getElementById("infoRow");
+  const status = document.getElementById("infoStatus");
+  try {
+    const resp = await fetch("/api/info");
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    const rssi   = typeof data.rssi === "number" ? data.rssi : null;
+    const rClass = rssi !== null ? rssiClass(rssi) : "";
+
+    const pills = [
+      { label: "IP",        value: data.ip    || "—"                  },
+      { label: "SSID",      value: data.ssid  || "—"                  },
+      { label: "WiFi Mode", value: data.mode  || "—"                  },
+      { label: "RSSI",      value: rssi !== null ? rssi + " dBm" : "—", cls: rClass },
+      { label: "Free Heap", value: data.freeHeap ? (data.freeHeap / 1024).toFixed(1) + " KB" : "—" },
+      { label: "Chip",      value: data.chip  || "—"                  },
+      { label: "Freq",      value: data.freq  ? data.freq + " MHz" : "—" },
+    ];
+
+    row.innerHTML = pills.map(p => `
+      <div class="info-pill">
+        <span class="info-pill-label">${p.label}</span>
+        <span class="info-pill-value ${p.cls || ""}">${p.value}</span>
+      </div>
+    `).join("");
+
+    const now = new Date();
+    status.textContent = `Last updated ${now.toLocaleTimeString()}`;
+  } catch (err) {
+    row.innerHTML = `<span style="color:var(--bad);font-size:.85rem">Error: ${err.message}</span>`;
+  }
+}
+
+fetchDeviceInfo();
+setInterval(fetchDeviceInfo, 10_000);
+
+/* ============================================================
+   Test 1 — Latency (Ping)
+   ============================================================ */
+
+let pingData   = null;
+let pingRSSI   = null;
+
+async function runPing() {
+  const btn      = document.getElementById("btn-ping");
+  const result   = document.getElementById("result-ping");
+  const progWrap = document.getElementById("prog-ping");
+  const progBar  = document.getElementById("progbar-ping");
+  const wrap     = document.getElementById("wrap-ping");
+  const canvas   = document.getElementById("canvas-ping");
+  const statsEl  = document.getElementById("stats-ping");
+  const N        = 20;
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Running…`;
+  result.className = "result-area";
+  result.textContent = "Pinging…";
+  progWrap.classList.add("visible");
+  progBar.style.width = "0%";
+
+  const rtts = [];
+
   try {
     for (let i = 0; i < N; i++) {
-      const t0 = performance.now();
-      const r = await fetch("/api/ping", { cache: "no-store" });
-      const d = await r.json();
-      const rtt = performance.now() - t0;
-      rtts.push(rtt);
-      lastRssi = d.rssi;
-      rows.push(`<tr><td>${i + 1}</td><td>${fmt(rtt)}</td></tr>`);
-      setProg(prog, ((i + 1) / N) * 100);
-    }
-    const min = Math.min(...rtts), max = Math.max(...rtts);
-    const avg = rtts.reduce((a, b) => a + b, 0) / rtts.length;
-    const jit = stddev(rtts);
-    res.innerHTML = `
-      <div class="stats">
-        <div class="stat"><div class="s-label">Min</div><div class="s-val">${fmt(min)} ms</div></div>
-        <div class="stat"><div class="s-label">Avg</div><div class="s-val">${fmt(avg)} ms</div></div>
-        <div class="stat"><div class="s-label">Max</div><div class="s-val">${fmt(max)} ms</div></div>
-        <div class="stat"><div class="s-label">Jitter</div><div class="s-val">${fmt(jit)} ms</div></div>
-        <div class="stat"><div class="s-label">RSSI</div><div class="s-val ${rssiClass(lastRssi)}">${lastRssi} dBm</div></div>
-      </div>
-      <div class="scroll-table"><table><thead><tr><th>#</th><th>RTT (ms)</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
-  } catch (e) {
-    showErr(res, e.message);
-  } finally {
-    hideProg(prog); btn.disabled = false;
-  }
-});
+      const t0   = performance.now();
+      const resp = await fetch("/api/ping", { cache: "no-store" });
+      const t1   = performance.now();
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} on ping ${i + 1}`);
 
-// ---------- Download ----------
-$("btnDl").addEventListener("click", async () => {
-  const btn = $("btnDl"), res = $("dlResult"), prog = $("dlProg");
-  btn.disabled = true; showSpinner(res);
-  const SIZE = 524288;
+      // Try to read RSSI from response body
+      try {
+        const body = await resp.json();
+        if (typeof body.rssi === "number") pingRSSI = body.rssi;
+      } catch(_) {}
+
+      const rtt = t1 - t0;
+      rtts.push(rtt);
+      progBar.style.width = ((i + 1) / N * 100) + "%";
+    }
+
+    pingData = rtts;
+    const min    = Math.min(...rtts);
+    const max    = Math.max(...rtts);
+    const avg    = rtts.reduce((a, b) => a + b, 0) / rtts.length;
+    const jitter = stdDev(rtts);
+
+    result.textContent = `Completed ${N} pings.`;
+    wrap.classList.add("visible");
+    statsEl.style.display = "flex";
+
+    document.getElementById("s-ping-min").textContent    = fmtMs(min);
+    document.getElementById("s-ping-avg").textContent    = fmtMs(avg);
+    document.getElementById("s-ping-max").textContent    = fmtMs(max);
+    document.getElementById("s-ping-jitter").textContent = fmtMs(jitter);
+    document.getElementById("s-ping-rssi").textContent   =
+      pingRSSI !== null ? pingRSSI + " dBm" : "—";
+
+    const drawPing = () => {
+      drawLineChart(canvas, pingData, {
+        lineColor: cssVar("--accent"),
+        gridLines: 5,
+        xLabels:   [1, 5, 10, 15, 20],
+        yUnit:     " ms",
+        refLines: [
+          { value: min, color: cssVar("--good"), label: `Min ${min.toFixed(1)} ms` },
+          { value: avg, color: cssVar("--accent"), label: `Avg ${avg.toFixed(1)} ms` },
+          { value: max, color: cssVar("--bad"),  label: `Max ${max.toFixed(1)} ms` },
+        ],
+      });
+    };
+    registerRedrawer(drawPing);
+    drawPing();
+
+  } catch (err) {
+    result.className   = "result-area error";
+    result.textContent = "Error: " + err.message;
+  }
+
+  progWrap.classList.remove("visible");
+  btn.disabled = false;
+  btn.textContent = "Run";
+}
+
+document.getElementById("btn-ping").addEventListener("click", runPing);
+
+/* ============================================================
+   Test 2 — Download Throughput
+   ============================================================ */
+
+let dlState = null;
+
+async function runDownload() {
+  const btn    = document.getElementById("btn-dl");
+  const result = document.getElementById("result-dl");
+  const wrap   = document.getElementById("wrap-dl");
+  const canvas = document.getElementById("canvas-dl");
+  const statsEl = document.getElementById("stats-dl");
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Downloading…`;
+  result.className  = "result-area";
+  result.textContent = "Fetching 512 KB…";
+
   try {
-    const t0 = performance.now();
-    const r = await fetch("/dl/" + SIZE, { cache: "no-store" });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const reader = r.body.getReader();
+    const BYTES = 524288; // 512 KB
+    const t0    = performance.now();
+    const resp  = await fetch(`/dl/${BYTES}`, { cache: "no-store" });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    // Consume via ReadableStream
+    const reader = resp.body.getReader();
     let received = 0;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      received += value.length;
-      setProg(prog, Math.min(100, (received / SIZE) * 100));
+      received += value.byteLength;
     }
-    const secs = (performance.now() - t0) / 1000;
-    const mbps = (received * 8) / secs / 1e6;
-    res.innerHTML = `
-      <div class="stats">
-        <div class="stat"><div class="s-label">Speed</div><div class="s-val">${fmt(mbps)} Mbps</div></div>
-        <div class="stat"><div class="s-label">Size</div><div class="s-val">${(received/1024).toFixed(0)} KB</div></div>
-        <div class="stat"><div class="s-label">Time</div><div class="s-val">${fmt(secs * 1000, 0)} ms</div></div>
-      </div>`;
-  } catch (e) {
-    showErr(res, e.message);
-  } finally {
-    hideProg(prog); btn.disabled = false;
-  }
-});
 
-// ---------- Upload ----------
-$("btnUl").addEventListener("click", async () => {
-  const btn = $("btnUl"), res = $("ulResult"), prog = $("ulProg");
-  btn.disabled = true; showSpinner(res);
-  const SIZE = 262144; // 256 KB
+    const elapsed = performance.now() - t0;
+    const mbps    = (received * 8) / (elapsed / 1000) / 1e6;
+
+    dlState = { mbps, received, elapsed };
+
+    result.textContent = `Done. ${(received / 1024).toFixed(0)} KB in ${elapsed.toFixed(0)} ms.`;
+    wrap.classList.add("visible");
+    statsEl.style.display = "flex";
+
+    document.getElementById("s-dl-speed").textContent = mbps.toFixed(2) + " Mbps";
+    document.getElementById("s-dl-size").textContent  = (received / 1024).toFixed(0) + " KB";
+    document.getElementById("s-dl-time").textContent  = elapsed.toFixed(0) + " ms";
+
+    const drawDl = () => {
+      drawGaugeBar(canvas, dlState.mbps, 10, "Mbps", { timeMs: dlState.elapsed });
+    };
+    registerRedrawer(drawDl);
+    drawDl();
+
+  } catch (err) {
+    result.className   = "result-area error";
+    result.textContent = "Error: " + err.message;
+  }
+
+  btn.disabled = false;
+  btn.textContent = "Run";
+}
+
+document.getElementById("btn-dl").addEventListener("click", runDownload);
+
+/* ============================================================
+   Test 3 — Upload Throughput
+   ============================================================ */
+
+let ulState = null;
+
+async function runUpload() {
+  const btn     = document.getElementById("btn-ul");
+  const result  = document.getElementById("result-ul");
+  const wrap    = document.getElementById("wrap-ul");
+  const canvas  = document.getElementById("canvas-ul");
+  const statsEl = document.getElementById("stats-ul");
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Uploading…`;
+  result.className  = "result-area";
+  result.textContent = "POSTing 256 KB…";
+
   try {
-    const buf = new Uint8Array(SIZE).fill(0xAA);
-    setProg(prog, 30);
-    const t0 = performance.now();
-    const r = await fetch("/ul", {
+    const BYTES = 262144; // 256 KB
+    const buf   = new Uint8Array(BYTES).fill(0xAA);
+
+    const t0   = performance.now();
+    const resp = await fetch("/ul", {
       method: "POST",
+      body:   buf,
       headers: { "Content-Type": "application/octet-stream" },
-      body: buf,
+      cache:  "no-store",
     });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const d = await r.json();
-    setProg(prog, 100);
-    const secs = (performance.now() - t0) / 1000;
-    const mbps = (SIZE * 8) / secs / 1e6;
-    res.innerHTML = `
-      <div class="stats">
-        <div class="stat"><div class="s-label">Speed</div><div class="s-val">${fmt(mbps)} Mbps</div></div>
-        <div class="stat"><div class="s-label">Sent</div><div class="s-val">${(SIZE/1024).toFixed(0)} KB</div></div>
-        <div class="stat"><div class="s-label">Recv'd</div><div class="s-val">${(d.received/1024).toFixed(0)} KB</div></div>
-        <div class="stat"><div class="s-label">Time</div><div class="s-val">${fmt(secs * 1000, 0)} ms</div></div>
-      </div>`;
-  } catch (e) {
-    showErr(res, e.message);
-  } finally {
-    hideProg(prog); btn.disabled = false;
-  }
-});
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
-// ---------- WebSocket Jitter ----------
-$("btnWs").addEventListener("click", () => {
-  const btn = $("btnWs"), res = $("wsResult"), prog = $("wsProg");
-  btn.disabled = true; showSpinner(res);
-  const N = 50, rtts = [];
-  let count = 0, sentAt = 0;
-  let ws;
+    const elapsed  = performance.now() - t0;
+    const received = parseInt(resp.headers.get("content-length") || "0", 10);
+    const mbps     = (BYTES * 8) / (elapsed / 1000) / 1e6;
+
+    ulState = { mbps, sent: BYTES, received, elapsed };
+
+    result.textContent = `Done. ${(BYTES / 1024).toFixed(0)} KB in ${elapsed.toFixed(0)} ms.`;
+    wrap.classList.add("visible");
+    statsEl.style.display = "flex";
+
+    document.getElementById("s-ul-speed").textContent = mbps.toFixed(2) + " Mbps";
+    document.getElementById("s-ul-sent").textContent  = (BYTES / 1024).toFixed(0) + " KB";
+    document.getElementById("s-ul-recv").textContent  = received > 0 ? received + " B" : "—";
+    document.getElementById("s-ul-time").textContent  = elapsed.toFixed(0) + " ms";
+
+    const drawUl = () => {
+      drawGaugeBar(canvas, ulState.mbps, 10, "Mbps", { timeMs: ulState.elapsed });
+    };
+    registerRedrawer(drawUl);
+    drawUl();
+
+  } catch (err) {
+    result.className   = "result-area error";
+    result.textContent = "Error: " + err.message;
+  }
+
+  btn.disabled = false;
+  btn.textContent = "Run";
+}
+
+document.getElementById("btn-ul").addEventListener("click", runUpload);
+
+/* ============================================================
+   Test 4 — WebSocket Jitter
+   ============================================================ */
+
+let wsJitterData = null;
+
+function runWsJitter() {
+  const btn     = document.getElementById("btn-ws");
+  const result  = document.getElementById("result-ws");
+  const wrap    = document.getElementById("wrap-ws");
+  const canvas  = document.getElementById("canvas-ws");
+  const statsEl = document.getElementById("stats-ws");
+  const N       = 50;
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Running…`;
+  result.className  = "result-area";
+  result.textContent = "Opening WebSocket…";
+
+  const host   = window.location.host;
+  const wsUrl  = `ws://${host}/ws`;
+  let   ws;
+
   try {
-    ws = new WebSocket("ws://" + location.host + "/ws");
-  } catch (e) {
-    showErr(res, e.message); btn.disabled = false; return;
+    ws = new WebSocket(wsUrl);
+  } catch (err) {
+    result.className   = "result-area error";
+    result.textContent = "Error: " + err.message;
+    btn.disabled = false;
+    btn.textContent = "Run";
+    return;
   }
-  const finish = (errMsg) => {
-    try { ws.close(); } catch (e) {}
-    hideProg(prog); btn.disabled = false;
-    if (errMsg) { showErr(res, errMsg); return; }
-    const min = Math.min(...rtts), max = Math.max(...rtts);
-    const avg = rtts.reduce((a, b) => a + b, 0) / rtts.length;
-    const jit = stddev(rtts);
-    res.innerHTML = `
-      <div class="stats">
-        <div class="stat"><div class="s-label">Mean</div><div class="s-val">${fmt(avg)} ms</div></div>
-        <div class="stat"><div class="s-label">Min</div><div class="s-val">${fmt(min)} ms</div></div>
-        <div class="stat"><div class="s-label">Max</div><div class="s-val">${fmt(max)} ms</div></div>
-        <div class="stat"><div class="s-label">Jitter</div><div class="s-val">${fmt(jit)} ms</div></div>
-      </div>`;
-  };
-  const sendOne = () => {
-    sentAt = performance.now();
-    ws.send(JSON.stringify({ t: sentAt }));
-  };
-  ws.onopen = () => sendOne();
-  ws.onmessage = () => {
-    rtts.push(performance.now() - sentAt);
-    count++;
-    setProg(prog, (count / N) * 100);
-    if (count >= N) finish(null);
-    else sendOne();
-  };
-  ws.onerror = () => finish("WebSocket error");
-});
 
-// ---------- Auto-Ping + Sparkline ----------
-const spark = $("spark");
-const sctx = spark.getContext("2d");
-const MAX_POINTS = 200;
-let pts = [];
-let autoTimer = null;
+  const rtts   = [];
+  let   sentAt = 0;
+  let   msgIdx = 0;
 
-function drawSpark() {
-  const w = spark.width, h = spark.height;
-  sctx.clearRect(0, 0, w, h);
-  if (pts.length < 2) return;
-  const min = Math.min(...pts), max = Math.max(...pts);
-  const range = (max - min) || 1;
-  const step = w / (MAX_POINTS - 1);
-  const css = getComputedStyle(document.body);
-  sctx.strokeStyle = css.getPropertyValue("--accent").trim() || "#4ea1ff";
-  sctx.lineWidth = 2;
-  sctx.beginPath();
-  pts.forEach((v, i) => {
-    const x = i * step;
-    const y = h - ((v - min) / range) * (h - 8) - 4;
-    if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+  ws.addEventListener("error", () => {
+    result.className   = "result-area error";
+    result.textContent = `Error: WebSocket connection to ${wsUrl} failed.`;
+    btn.disabled = false;
+    btn.textContent = "Run";
+    try { ws.close(); } catch(_) {}
   });
-  sctx.stroke();
-}
 
-async function autoTick() {
-  try {
-    const t0 = performance.now();
-    const r = await fetch("/api/ping", { cache: "no-store" });
-    const d = await r.json();
-    const rtt = performance.now() - t0;
-    pts.push(rtt);
-    if (pts.length > MAX_POINTS) pts.shift();
-    drawSpark();
-    const rssiEl = $("autoRssi");
-    rssiEl.textContent = d.rssi;
-    rssiEl.className = "big-num " + rssiClass(d.rssi);
-    $("autoResult").innerHTML = `Last RTT: ${fmt(rtt)} ms · samples: ${pts.length}/${MAX_POINTS}`;
-  } catch (e) {
-    $("autoResult").innerHTML = '<span class="err">Ping failed: ' + e.message + "</span>";
+  ws.addEventListener("open", () => {
+    result.textContent = `Connected. Sending message 1/${N}…`;
+    sendNext();
+  });
+
+  function sendNext() {
+    if (msgIdx >= N) {
+      ws.close();
+      return;
+    }
+    sentAt = performance.now();
+    ws.send(`ping-${msgIdx}`);
   }
+
+  ws.addEventListener("message", () => {
+    const rtt = performance.now() - sentAt;
+    rtts.push(rtt);
+    msgIdx++;
+    result.textContent = `Message ${msgIdx}/${N} · RTT: ${rtt.toFixed(2)} ms`;
+    if (msgIdx < N) {
+      sendNext();
+    } else {
+      ws.close();
+    }
+  });
+
+  ws.addEventListener("close", () => {
+    if (rtts.length === 0) return;
+
+    wsJitterData = rtts;
+    const min    = Math.min(...rtts);
+    const max    = Math.max(...rtts);
+    const mean   = rtts.reduce((a, b) => a + b, 0) / rtts.length;
+    const jitter = stdDev(rtts);
+
+    result.textContent = `Completed ${rtts.length} messages.`;
+    wrap.classList.add("visible");
+    statsEl.style.display = "flex";
+
+    document.getElementById("s-ws-mean").textContent   = fmtMs(mean);
+    document.getElementById("s-ws-min").textContent    = fmtMs(min);
+    document.getElementById("s-ws-max").textContent    = fmtMs(max);
+    document.getElementById("s-ws-jitter").textContent = fmtMs(jitter);
+
+    const drawWs = () => {
+      drawLineChart(canvas, wsJitterData, {
+        lineColor: cssVar("--accent"),
+        gridLines: 5,
+        yUnit:     " ms",
+        refLines: [
+          { value: min,  color: cssVar("--good"),   label: `Min ${min.toFixed(1)} ms`  },
+          { value: mean, color: cssVar("--accent"),  label: `Avg ${mean.toFixed(1)} ms` },
+          { value: max,  color: cssVar("--bad"),    label: `Max ${max.toFixed(1)} ms`  },
+        ],
+      });
+    };
+    registerRedrawer(drawWs);
+    drawWs();
+
+    btn.disabled    = false;
+    btn.textContent = "Run";
+  });
 }
 
-$("btnAuto").addEventListener("click", () => {
-  const btn = $("btnAuto");
-  if (autoTimer) {
-    clearInterval(autoTimer); autoTimer = null;
-    btn.textContent = "Start";
-  } else {
-    autoTick();
-    autoTimer = setInterval(autoTick, 5000);
-    btn.textContent = "Stop";
+document.getElementById("btn-ws").addEventListener("click", runWsJitter);
+
+/* ============================================================
+   Test 5 — Auto-ping Live Monitor
+   ============================================================ */
+
+const LIVE_MAX   = 200;
+let liveRunning  = false;
+let liveTimer    = null;
+let liveSamples  = [];
+let liveLast     = null;
+let liveLastRSSI = null;
+let liveCanvas   = null;
+let liveRedrawFn = null;
+
+function drawLive() {
+  const canvas = document.getElementById("canvas-live");
+  const data   = liveSamples;
+  if (!canvas) return;
+
+  if (data.length === 0) {
+    const { ctx, w, h } = fitCanvas(canvas);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = cssVar("--muted");
+    ctx.font      = "13px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("No data yet", w / 2, h / 2);
+    return;
+  }
+
+  const PAD_LEFT   = 52;
+  const PAD_RIGHT  = 16;
+  const PAD_TOP    = 18;
+  const PAD_BOTTOM = 28;
+
+  const { ctx, w, h } = fitCanvas(canvas);
+  const plotW = w - PAD_LEFT - PAD_RIGHT;
+  const plotH = h - PAD_TOP - PAD_BOTTOM;
+
+  const lineColor  = cssVar("--accent");
+  const gridColor  = "rgba(127,127,127,0.15)";
+  const textColor  = cssVar("--muted");
+  const gridLines  = 5;
+
+  // Auto-scale
+  let yMin = Math.min(...data);
+  let yMax = Math.max(...data);
+  const range = yMax - yMin || 1;
+  const pad   = range * 0.2;
+  const yLo   = Math.max(0, yMin - pad);
+  const yHi   = yMax + pad;
+  const yRange = yHi - yLo;
+
+  const n = data.length;
+  function toX(i)   { return PAD_LEFT + (i / (LIVE_MAX - 1)) * plotW; }
+  function toY(val) { return PAD_TOP  + (1 - (val - yLo) / yRange) * plotH; }
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Grid + Y labels
+  ctx.strokeStyle  = gridColor;
+  ctx.lineWidth    = 1;
+  ctx.font         = "11px system-ui, sans-serif";
+  ctx.fillStyle    = textColor;
+  ctx.textAlign    = "right";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i <= gridLines; i++) {
+    const val = yLo + (i / gridLines) * yRange;
+    const y   = PAD_TOP + (1 - i / gridLines) * plotH;
+    ctx.beginPath();
+    ctx.moveTo(PAD_LEFT, y);
+    ctx.lineTo(PAD_LEFT + plotW, y);
+    ctx.stroke();
+    ctx.fillText(val.toFixed(1) + " ms", PAD_LEFT - 4, y);
+  }
+
+  // X labels
+  ctx.textAlign    = "center";
+  ctx.textBaseline = "top";
+  const xStep = Math.ceil(LIVE_MAX / 5);
+  for (let i = 0; i <= LIVE_MAX; i += xStep) {
+    ctx.fillText(String(i), PAD_LEFT + (i / (LIVE_MAX - 1)) * plotW, PAD_TOP + plotH + 5);
+  }
+
+  // Gradient fill under the live data
+  const startX = toX(LIVE_MAX - n);
+  const grad   = ctx.createLinearGradient(0, PAD_TOP, 0, PAD_TOP + plotH);
+  grad.addColorStop(0, hexToRgba(lineColor, 0.35));
+  grad.addColorStop(1, hexToRgba(lineColor, 0.03));
+
+  ctx.beginPath();
+  ctx.moveTo(startX, PAD_TOP + plotH);
+  for (let i = 0; i < n; i++) {
+    ctx.lineTo(toX(LIVE_MAX - n + i), toY(data[i]));
+  }
+  ctx.lineTo(toX(LIVE_MAX - 1), PAD_TOP + plotH);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth   = 2;
+  ctx.lineJoin    = "round";
+  for (let i = 0; i < n; i++) {
+    const x = toX(LIVE_MAX - n + i);
+    const y = toY(data[i]);
+    if (i === 0) ctx.moveTo(x, y);
+    else         ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Most recent dot (bright, larger)
+  const lastX = toX(LIVE_MAX - 1);
+  const lastY = toY(data[n - 1]);
+  ctx.beginPath();
+  ctx.arc(lastX, lastY, 5, 0, Math.PI * 2);
+  ctx.fillStyle = "#fff";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
+  ctx.fillStyle = lineColor;
+  ctx.fill();
+}
+
+// Register for theme redraws
+registerRedrawer(drawLive);
+
+// Draw empty chart on load
+window.addEventListener("load", () => {
+  const canvas = document.getElementById("canvas-live");
+  if (canvas) {
+    // Wait for layout
+    requestAnimationFrame(() => drawLive());
   }
 });
+
+async function doLivePing() {
+  const statusEl = document.getElementById("live-status");
+  const rssiEl   = document.getElementById("live-rssi");
+  const resultEl = document.getElementById("result-live");
+
+  try {
+    const t0   = performance.now();
+    const resp = await fetch("/api/ping", { cache: "no-store" });
+    const t1   = performance.now();
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    const rtt = t1 - t0;
+    liveLast  = rtt;
+
+    try {
+      const body = await resp.json();
+      if (typeof body.rssi === "number") liveLastRSSI = body.rssi;
+    } catch(_) {}
+
+    liveSamples.push(rtt);
+    if (liveSamples.length > LIVE_MAX) liveSamples.shift();
+
+    const rssiStr   = liveLastRSSI !== null ? liveLastRSSI + " dBm" : "—";
+    const rssiCls   = liveLastRSSI !== null ? rssiClass(liveLastRSSI) : "";
+    statusEl.innerHTML =
+      `Last RTT: ${rtt.toFixed(2)} ms &nbsp;&middot;&nbsp; RSSI: ${rssiStr} &nbsp;&middot;&nbsp; samples: ${liveSamples.length} / ${LIVE_MAX}`;
+    rssiEl.textContent = rssiStr;
+    rssiEl.className   = "live-rssi " + rssiCls;
+    resultEl.className = "result-area";
+    resultEl.textContent = "Monitoring…";
+
+    drawLive();
+
+  } catch (err) {
+    const resultEl = document.getElementById("result-live");
+    resultEl.className   = "result-area error";
+    resultEl.textContent = "Error: " + err.message;
+  }
+}
+
+document.getElementById("btn-live").addEventListener("click", () => {
+  const btn = document.getElementById("btn-live");
+
+  if (!liveRunning) {
+    liveRunning = true;
+    btn.textContent = "Stop";
+    btn.classList.add("active");
+    doLivePing();
+    liveTimer = setInterval(doLivePing, 5_000);
+  } else {
+    liveRunning = false;
+    clearInterval(liveTimer);
+    liveTimer = null;
+    btn.textContent = "Start";
+    btn.classList.remove("active");
+    document.getElementById("result-live").className  = "result-area";
+    document.getElementById("result-live").textContent = "Stopped. Press Start to resume.";
+  }
+});
+
+/* ============================================================
+   Resize handler — re-fit all visible canvases
+   ============================================================ */
+
+let resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    redrawAllCharts();
+    drawLive();
+  }, 150);
+});
+
 </script>
 </body>
 </html>
