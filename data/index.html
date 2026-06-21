@@ -424,6 +424,29 @@ canvas.chart-canvas {
       </div>
     </div>
 
+    <!-- Test 6: RSSI Live Monitor (full-width) -->
+    <div class="card card-full" id="card-rssi-monitor">
+      <div class="card-header">
+        <h2 class="card-title">RSSI Live Monitor</h2>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--muted)">Rate:</span>
+          <select id="rssi-rate-select" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:13px">
+            <option value="250">4 Hz</option>
+            <option value="500" selected>2 Hz</option>
+            <option value="1000">1 Hz</option>
+          </select>
+          <button class="toggle-btn" id="btn-rssi-monitor">Start</button>
+          <button class="btn" id="btn-rssi-export" style="padding:6px 14px;font-size:13px" disabled>Export JSON</button>
+          <button class="btn" id="btn-rssi-clear" style="padding:6px 14px;font-size:13px;background:var(--card);border:1px solid var(--border)" disabled>Clear</button>
+        </div>
+      </div>
+      <div class="result-area" id="result-rssi-monitor">Press Start to begin RSSI monitoring.</div>
+      <div class="chart-wrap visible" id="wrap-rssi-monitor">
+        <canvas class="chart-canvas" id="canvas-rssi-monitor" height="220"></canvas>
+      </div>
+      <div class="live-status" id="rssi-monitor-status">Samples: 0 &nbsp;&middot;&nbsp; Duration: 0 s &nbsp;&middot;&nbsp; RSSI: &mdash; &nbsp;&middot;&nbsp; RTT: &mdash;</div>
+    </div>
+
     <!-- Test 5: Auto-ping Live Monitor (full-width) -->
     <div class="card card-full" id="card-live">
       <div class="card-header">
@@ -1368,6 +1391,239 @@ document.getElementById("btn-live").addEventListener("click", () => {
     document.getElementById("result-live").className  = "result-area";
     document.getElementById("result-live").textContent = "Stopped. Press Start to resume.";
   }
+});
+
+
+/* ============================================================
+   Test 6 — RSSI Live Monitor (up to 4 Hz, dual-axis chart)
+   ============================================================ */
+
+const RSSI_BUF_MAX = 2400;   // 10 min @ 4 Hz
+let rssiRunning    = false;
+let rssiTimer      = null;
+let rssiSamples    = [];     // [{t, rssi, rtt}]
+
+function rssiExportJSON() {
+  if (rssiSamples.length === 0) return;
+  const rateMs = parseInt(document.getElementById("rssi-rate-select").value);
+  const payload = {
+    meta: {
+      exported:    new Date().toISOString(),
+      device_ip:   window.location.hostname,
+      rate_ms:     rateMs,
+      samples:     rssiSamples.length,
+      duration_s:  rssiSamples.length > 1
+        ? ((rssiSamples[rssiSamples.length - 1].t - rssiSamples[0].t) / 1000).toFixed(2)
+        : 0
+    },
+    samples: rssiSamples
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = "rssi_" + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function drawRssiChart() {
+  const canvas = document.getElementById("canvas-rssi-monitor");
+  if (!canvas) return;
+  const { ctx, w, h } = fitCanvas(canvas);
+
+  if (rssiSamples.length === 0) {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle    = cssVar("--muted");
+    ctx.font         = "13px system-ui, sans-serif";
+    ctx.textAlign    = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("No data yet — press Start", w / 2, h / 2);
+    return;
+  }
+
+  const PAD_LEFT   = 62;
+  const PAD_RIGHT  = 62;
+  const PAD_TOP    = 22;
+  const PAD_BOTTOM = 34;
+  const plotW = w - PAD_LEFT - PAD_RIGHT;
+  const plotH = h - PAD_TOP - PAD_BOTTOM;
+  const GRID  = 5;
+
+  const rssiVals   = rssiSamples.map(s => s.rssi);
+  const rttVals    = rssiSamples.map(s => s.rtt);
+  const rssiMin    = Math.min(-90, Math.min(...rssiVals) - 3);
+  const rssiMax    = Math.max(-30, Math.max(...rssiVals) + 3);
+  const rssiRange  = rssiMax - rssiMin;
+  const rttMax     = Math.max(20, Math.max(...rttVals) * 1.25);
+  const rttRange   = rttMax;
+  const n          = rssiSamples.length;
+  const t0         = rssiSamples[0].t;
+  const t1         = rssiSamples[n - 1].t;
+  const tRange     = Math.max(t1 - t0, 1);
+
+  function toX(t)     { return PAD_LEFT + ((t - t0) / tRange) * plotW; }
+  function toYR(v)    { return PAD_TOP  + (1 - (v - rssiMin) / rssiRange) * plotH; }
+  function toYRtt(v)  { return PAD_TOP  + (1 - v / rttRange) * plotH; }
+
+  ctx.clearRect(0, 0, w, h);
+
+  const gridColor   = "rgba(127,127,127,0.15)";
+  const textColor   = cssVar("--muted");
+  const accentColor = cssVar("--accent");
+  const rttColor    = cssVar("--warn");
+
+  // Background RSSI zones
+  const zones = [
+    { lo: -60,     hi: rssiMax,  color: "rgba(62,207,107,0.06)"  },
+    { lo: -75,     hi: -60,     color: "rgba(245,200,66,0.06)"  },
+    { lo: rssiMin, hi: -75,     color: "rgba(255,80,89,0.06)"   },
+  ];
+  for (const z of zones) {
+    const yTop = toYR(Math.min(z.hi, rssiMax));
+    const yBot = toYR(Math.max(z.lo, rssiMin));
+    ctx.fillStyle = z.color;
+    ctx.fillRect(PAD_LEFT, yTop, plotW, yBot - yTop);
+  }
+
+  // Grid + axis labels
+  ctx.lineWidth    = 1;
+  ctx.font         = "11px system-ui, sans-serif";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i <= GRID; i++) {
+    const frac = i / GRID;
+    const y    = PAD_TOP + (1 - frac) * plotH;
+    ctx.strokeStyle = gridColor;
+    ctx.beginPath(); ctx.moveTo(PAD_LEFT, y); ctx.lineTo(PAD_LEFT + plotW, y); ctx.stroke();
+    // Left — RSSI
+    ctx.fillStyle = accentColor; ctx.textAlign = "right";
+    ctx.fillText((rssiMin + frac * rssiRange).toFixed(0) + " dBm", PAD_LEFT - 6, y);
+    // Right — RTT
+    ctx.fillStyle = rttColor; ctx.textAlign = "left";
+    ctx.fillText((frac * rttMax).toFixed(1) + " ms", PAD_LEFT + plotW + 6, y);
+  }
+
+  // X axis — time
+  ctx.fillStyle = textColor; ctx.textAlign = "center"; ctx.textBaseline = "top";
+  const xTicks = Math.min(n - 1, 8);
+  for (let i = 0; i <= xTicks; i++) {
+    const frac = i / xTicks;
+    const t    = t0 + frac * tRange;
+    const x    = toX(t);
+    ctx.fillText(((t - t0) / 1000).toFixed(0) + "s", x, PAD_TOP + plotH + 6);
+  }
+
+  // RTT line (dashed, secondary)
+  ctx.beginPath(); ctx.strokeStyle = rttColor; ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]); ctx.lineJoin = "round";
+  for (let i = 0; i < n; i++) {
+    const x = toX(rssiSamples[i].t), y = toYRtt(rssiSamples[i].rtt);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke(); ctx.setLineDash([]);
+
+  // RSSI gradient fill
+  const grad = ctx.createLinearGradient(0, PAD_TOP, 0, PAD_TOP + plotH);
+  grad.addColorStop(0, hexToRgba(accentColor, 0.28));
+  grad.addColorStop(1, hexToRgba(accentColor, 0.02));
+  ctx.beginPath();
+  ctx.moveTo(toX(rssiSamples[0].t), PAD_TOP + plotH);
+  for (let i = 0; i < n; i++) ctx.lineTo(toX(rssiSamples[i].t), toYR(rssiSamples[i].rssi));
+  ctx.lineTo(toX(rssiSamples[n-1].t), PAD_TOP + plotH);
+  ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+
+  // RSSI line
+  ctx.beginPath(); ctx.strokeStyle = accentColor; ctx.lineWidth = 2; ctx.lineJoin = "round";
+  for (let i = 0; i < n; i++) {
+    const x = toX(rssiSamples[i].t), y = toYR(rssiSamples[i].rssi);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Latest dot
+  const lx = toX(rssiSamples[n-1].t), ly = toYR(rssiSamples[n-1].rssi);
+  ctx.beginPath(); ctx.arc(lx, ly, 5, 0, Math.PI * 2); ctx.fillStyle = "#fff"; ctx.fill();
+  ctx.beginPath(); ctx.arc(lx, ly, 3.5, 0, Math.PI * 2); ctx.fillStyle = accentColor; ctx.fill();
+
+  // Legend (top-left inside plot)
+  ctx.font = "11px system-ui, sans-serif"; ctx.textBaseline = "top";
+  ctx.fillStyle = accentColor; ctx.textAlign = "left";
+  ctx.fillText("— RSSI (dBm)", PAD_LEFT + 8, PAD_TOP + 6);
+  ctx.setLineDash([4, 3]); ctx.strokeStyle = rttColor; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(PAD_LEFT + 130, PAD_TOP + 11); ctx.lineTo(PAD_LEFT + 148, PAD_TOP + 11); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = rttColor; ctx.fillText("RTT (ms)", PAD_LEFT + 152, PAD_TOP + 6);
+}
+
+registerRedrawer(drawRssiChart);
+window.addEventListener("load", () => requestAnimationFrame(drawRssiChart));
+
+async function doRssiSample() {
+  try {
+    const t0   = performance.now();
+    const resp = await fetch("/api/ping", { cache: "no-store" });
+    const t1   = performance.now();
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const body = await resp.json();
+    const rtt  = parseFloat((t1 - t0).toFixed(2));
+    const rssi = typeof body.rssi === "number" ? body.rssi : null;
+    if (rssi === null) return;
+
+    rssiSamples.push({ t: Date.now(), rssi, rtt });
+    if (rssiSamples.length > RSSI_BUF_MAX) rssiSamples.shift();
+
+    const n   = rssiSamples.length;
+    const dur = n > 1
+      ? ((rssiSamples[n-1].t - rssiSamples[0].t) / 1000).toFixed(1)
+      : "0";
+    const cls = rssiClass(rssi);
+    document.getElementById("rssi-monitor-status").innerHTML =
+      "Samples: " + n + " &nbsp;&middot;&nbsp; Duration: " + dur + " s" +
+      " &nbsp;&middot;&nbsp; RSSI: <span class='" + cls + "'>" + rssi + " dBm</span>" +
+      " &nbsp;&middot;&nbsp; RTT: " + rtt + " ms";
+    const res = document.getElementById("result-rssi-monitor");
+    res.className = "result-area"; res.textContent = "Monitoring…";
+    drawRssiChart();
+  } catch (err) {
+    const res = document.getElementById("result-rssi-monitor");
+    res.className = "result-area error"; res.textContent = "Error: " + err.message;
+  }
+}
+
+document.getElementById("btn-rssi-monitor").addEventListener("click", () => {
+  const btn    = document.getElementById("btn-rssi-monitor");
+  const expBtn = document.getElementById("btn-rssi-export");
+  const clrBtn = document.getElementById("btn-rssi-clear");
+  const rateMs = parseInt(document.getElementById("rssi-rate-select").value);
+
+  if (!rssiRunning) {
+    rssiRunning = true;
+    btn.textContent = "Stop"; btn.classList.add("active");
+    doRssiSample();
+    rssiTimer = setInterval(doRssiSample, rateMs);
+    expBtn.disabled = false; clrBtn.disabled = false;
+  } else {
+    rssiRunning = false;
+    clearInterval(rssiTimer); rssiTimer = null;
+    btn.textContent = "Start"; btn.classList.remove("active");
+    const res = document.getElementById("result-rssi-monitor");
+    res.className = "result-area";
+    res.textContent = "Paused. " + rssiSamples.length + " samples buffered. Export JSON to save or Start to resume.";
+  }
+});
+
+document.getElementById("btn-rssi-export").addEventListener("click", rssiExportJSON);
+
+document.getElementById("btn-rssi-clear").addEventListener("click", () => {
+  if (rssiRunning) return;
+  rssiSamples = [];
+  document.getElementById("rssi-monitor-status").textContent =
+    "Samples: 0 · Duration: 0 s · RSSI: — · RTT: —";
+  const res = document.getElementById("result-rssi-monitor");
+  res.className = "result-area"; res.textContent = "Buffer cleared. Press Start to begin.";
+  document.getElementById("btn-rssi-export").disabled = true;
+  document.getElementById("btn-rssi-clear").disabled  = true;
+  drawRssiChart();
 });
 
 /* ============================================================
