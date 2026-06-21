@@ -580,8 +580,6 @@ function drawLineChart(canvas, data, opts = {}) {
 
   // Gradient fill
   const grad = ctx.createLinearGradient(0, PAD_TOP, 0, PAD_TOP + plotH);
-  grad.addColorStop(0, lineColor.replace(")", ", 0.35)").replace("rgb(", "rgba(").replace("#", "rgba_hex_"));
-  // Safe gradient: just alpha variants
   grad.addColorStop(0, hexToRgba(lineColor, 0.35));
   grad.addColorStop(1, hexToRgba(lineColor, 0.03));
 
